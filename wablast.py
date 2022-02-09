@@ -1,5 +1,6 @@
 from selenium import webdriver
 import time
+import utils
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import ElementNotInteractableException
 from selenium.common.exceptions import TimeoutException
@@ -22,6 +23,8 @@ class Blast:
         self.wait = WebDriverWait(self.driver, 45)
         self.fwd_number = 1
         self.pause = 0.5
+        self.temp = []
+        self.report = pd.DataFrame()
         self.xpath = {
             'messages': '//div[@class="Nm1g1 _22AX6"]',
             'msg_option': '//span[@data-testid="down-context"]',
@@ -77,10 +80,12 @@ class Blast:
         time.sleep(self.pause)
         try:
             self.cek_n_klik(f'//span[@title="{name}"]', t=3)
+            self.temp.append(1)
         except ElementNotInteractableException:
             print(f"Can't click {name}!")
         except TimeoutException:
             print(f"Can't find {name}!")
+            self.temp.append(0)
         finally:
             search.clear()
 
@@ -88,19 +93,24 @@ class Blast:
         self.klik(self.xpath['send'])
 
     def forward(self, source, n, targets: list):
-        self.choose_name_or_group(source)
-        time.sleep(self.pause)
-        self.click_msg_option()
-        time.sleep(self.pause)
-        self.klik(self.xpath['forward'])
-        time.sleep(self.pause)
-        self.click_msg_to_fwd(n)
-        time.sleep(self.pause)
-        self.click_fwd_btn()
-        time.sleep(self.pause)
-        for target in targets:
-            self.fill_click_target_fwd(target)
-        self.klik(self.xpath['send'])
+        self.report = pd.DataFrame({'name': targets})
+        self.temp = []
+        all_target = utils.list_partition(targets)
+        for subtarget in all_target:
+            self.choose_name_or_group(source)
+            time.sleep(self.pause)
+            self.click_msg_option()
+            time.sleep(self.pause)
+            self.klik(self.xpath['forward'])
+            time.sleep(self.pause)
+            self.click_msg_to_fwd(n)
+            time.sleep(self.pause)
+            self.click_fwd_btn()
+            time.sleep(self.pause)
+            for target in subtarget:
+                self.fill_click_target_fwd(target)
+            self.klik(self.xpath['send'])
+        self.report['sent'] = self.temp
 
     # Other commands
     def clickable(self, xpath):
@@ -111,6 +121,9 @@ class Blast:
         wait = WebDriverWait(self.driver, t)
         wait.until(EC.presence_of_element_located((By.XPATH, xpath)))
         time.sleep(self.pause)
+
+    def export(self, filename='report.xlsx'):
+        self.report.to_excel(f'./report/{filename}', index=False)
 
     def close(self):
         self.driver.quit()
