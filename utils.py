@@ -1,8 +1,4 @@
 import math
-import contact
-
-# filter duplicate item in a list
-import main
 
 
 def filter_duplicate(the_list):
@@ -78,5 +74,4 @@ def ganti_sapaan(nama, the_string, placeholder='<<sapaan>>'):
 
 
 if __name__ == '__main__':
-    pesan = main.message()
-    print(ganti_sapaan('Dino har', pesan))
+    pass
