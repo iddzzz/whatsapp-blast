@@ -33,11 +33,12 @@ class Blast:
             'fwds_btn': '//button[@title="Forward messages"]',
             'search_fwd': '//div[@role="textbox"]',
             'send': '//div[@role="button"]',
-            'checkbox_fwd': '//div[@data-testid="visual-checkbox"]'
+            'checkbox_fwd': '//div[@data-testid="visual-checkbox"]',
+            'search_name': '//div[@title="Search input textbox"]'
         }
 
     # Common commands
-    def klik(self, xpath: str):
+    def klik(self, xpath):
         self.clickable(xpath)
         self.driver.find_element(By.XPATH, xpath).click()
 
@@ -47,6 +48,12 @@ class Blast:
 
     def access(self, url='https://web.whatsapp.com/'):
         self.driver.get(url)
+
+    # Specific commands
+    def search_name(self, name='Mother'):
+        search = self.driver.find_element(By.XPATH, self.xpath['search_name'])
+        search.clear()
+        search.send_keys(name)
 
     def choose_name_or_group(self, name='CHECK'):
         self.klik(f'//span[@title="{name}"]')
@@ -112,9 +119,24 @@ class Blast:
             self.klik(self.xpath['send'])
         self.report['sent'] = self.temp
 
+    def check_contacts(self, names: list):
+        self.report = pd.DataFrame({'name': names})
+        self.temp = []
+        for name in names:
+            self.search_name(name)
+            try:
+                self.cek_n_klik(f'//span[@title="{name}"]', t=3)
+                self.temp.append(1)
+            except TimeoutException:
+                self.temp.append(0)
+            finally:
+                time.sleep(self.pause)
+        self.report['available'] = self.temp
+
     # Other commands
-    def clickable(self, xpath):
-        self.wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
+    def clickable(self, xpath, t=45):
+        wait = WebDriverWait(self.driver, t)
+        wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
         time.sleep(self.pause)
 
     def doesexist(self, xpath, t=45):
