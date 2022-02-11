@@ -21,6 +21,7 @@ class Blast:
     def __init__(self):
         self.driver = webdriver.Chrome(service=Blast.s, options=Blast.options)
         self.wait = WebDriverWait(self.driver, 45)
+        self.active = False
         self.fwd_number = 1
         self.pause = 0.5
         self.temp = []
@@ -34,7 +35,8 @@ class Blast:
             'search_fwd': '//div[@role="textbox"]',
             'send': '//div[@role="button"]',
             'checkbox_fwd': '//div[@data-testid="visual-checkbox"]',
-            'search_name': '//div[@title="Search input textbox"]'
+            'search_name': '//div[@title="Search input textbox"]',
+            'active_sign': '//span[@data-testid="alert-notification"]'
         }
 
     # Common commands
@@ -50,6 +52,13 @@ class Blast:
         self.driver.get(url)
 
     # Specific commands
+    def isactive(self):
+        try:
+            self.doesexist(self.xpath['active_sign'], t=3)
+            return True
+        except TimeoutException:
+            return False
+
     def search_name(self, name='Mother'):
         search = self.driver.find_element(By.XPATH, self.xpath['search_name'])
         search.clear()
@@ -104,6 +113,9 @@ class Blast:
         self.temp = []
         all_target = utils.list_partition(targets)
         for subtarget in all_target:
+            while not self.isactive():
+                print('Can\'t continue. Need connection!')
+                time.sleep(5)
             self.choose_name_or_group(source)
             time.sleep(self.pause)
             self.click_msg_option()
