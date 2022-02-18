@@ -24,6 +24,7 @@ class Blast:
         self.active = False
         self.fwd_number = 1
         self.pause = 0.5
+        self.contact = ['Father']
         self.temp = []
         self.report = pd.DataFrame()
         self.xpath = {
@@ -72,6 +73,7 @@ class Blast:
         ActionChains(self.driver).move_to_element(elems[-1]).perform()  # hover over
         self.klik(self.xpath['msg_option'])
 
+    # Forward message(s)
     def click_fwd_msg(self):
         self.klik(self.xpath['forward'])
 
@@ -113,9 +115,7 @@ class Blast:
         self.temp = []
         all_target = utils.list_partition(targets)
         for subtarget in all_target:
-            while not self.isactive():
-                print('Can\'t continue. Need connection!')
-                time.sleep(5)
+            self.looptilactive()
             self.choose_name_or_group(source)
             time.sleep(self.pause)
             self.click_msg_option()
@@ -135,6 +135,7 @@ class Blast:
         self.report = pd.DataFrame({'name': names})
         self.temp = []
         for name in names:
+            self.looptilactive()
             self.search_name(name)
             try:
                 self.cek_n_klik(f'//span[@title="{name}"]', t=3)
@@ -155,6 +156,16 @@ class Blast:
         wait = WebDriverWait(self.driver, t)
         wait.until(EC.presence_of_element_located((By.XPATH, xpath)))
         time.sleep(self.pause)
+
+    def looptilactive(self):
+        while not self.isactive():
+            print('Can\'t continue. Need connection!')
+            time.sleep(5)
+
+    def import_contact(self, path='./contact/contact.xlsx'):
+        df = pd.read_excel(path)
+        df = df.dropna()
+        self.contact = df.iloc[:, :1].values.ravel()
 
     def export(self, filename='report.xlsx'):
         self.report.to_excel(f'./report/{filename}', index=False)
