@@ -162,8 +162,8 @@ class Blast:
             print('Can\'t continue. Need connection!')
             time.sleep(5)
 
-    def import_contact(self, path='./contact/contact.xlsx'):
-        df = pd.read_excel(path)
+    def import_contact(self, filename='contact.xlsx'):
+        df = pd.read_excel(f'./contact/{filename}')
         df = df.dropna()
         self.contact = df.iloc[:, :1].values.ravel()
 
