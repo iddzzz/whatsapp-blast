@@ -163,7 +163,8 @@ class Blast:
             time.sleep(5)
 
     def import_contact(self, filename='contact.xlsx'):
-        df = pd.read_excel(f'./contact/{filename}')
+        # df = pd.read_excel(f'./contact/{filename}')
+        df = pd.read_excel(filename)
         df = df.dropna()
         self.contact = df.iloc[:, :1].values.ravel()
 
@@ -176,6 +177,5 @@ class Blast:
 
 if __name__ == '__main__':
     blast = Blast()
-    print("Yuhu")
     time.sleep(10)
     blast.access()
