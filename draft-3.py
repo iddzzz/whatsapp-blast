@@ -1,3 +1,5 @@
+import tkinter as tk
+from tkinter.filedialog import askopenfilename
 from selenium import webdriver
 import time
 import utils
@@ -12,13 +14,45 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 import pandas as pd
 
-class Blast:
+
+class Blast(tk.Frame):
+
     options = webdriver.ChromeOptions()
     options.add_argument(r'--user-data-dir=C:\Users\Saidzzz\AppData\Local\Google\Chrome\User Data\Default')
     options.add_argument('--profile-directory=Default')
     s = Service('./chromedriver/chromedriver.exe')
 
-    def __init__(self):
+    def __init__(self, parent, *args, **kwargs):
+        tk.Frame.__init__(self, parent, *args, **kwargs)
+        self.parent = parent
+
+        self.parent.title("WhatsApp Blast")
+        self.parent.rowconfigure(0, minsize=500, weight=1)
+        self.parent.columnconfigure(1, minsize=500, weight=1)
+        self.parent.columnconfigure(2, minsize=250, weight=1)
+
+        # Frames
+        self.fr_buttons = tk.Frame(self, relief=tk.RAISED)
+        self.fr_target = tk.Frame(self, relief=tk.RIDGE)
+        self.fr_action = tk.Frame(self, relief=tk.RAISED)
+
+        # Buttons on fr_buttons
+        self.btn_connect = tk.Button(self.fr_buttons, text="Connect", command=self.access)
+        self.btn_import = tk.Button(self.fr_buttons, text="Import Contact", command=self.impor_kontak)
+        self.btn_close_browser = tk.Button(self.fr_buttons, text="Safely Close", command=self.close)
+        self.btn_connect.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        self.btn_import.grid(row=1, column=0, sticky="ew", padx=5)
+        self.btn_close_browser.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+
+        # Elements on fr_target
+        self.lbl_target = tk.Label(self.fr_target, text="Test", anchor="w")
+        self.lbl_target.pack()
+
+        # Attach frames
+        self.fr_buttons.grid(row=0, column=0, sticky="ns")
+        self.fr_target.grid(row=0, column=1, sticky="nsew")
+        self.fr_action.grid(row=0, column=2, sticky="nsew")
+
         self.driver = webdriver.Chrome(service=Blast.s, options=Blast.options)
         self.wait = WebDriverWait(self.driver, 45)
         self.active = False
@@ -39,6 +73,8 @@ class Blast:
             'search_name': '//div[@title="Search input textbox"]',
             'active_sign': '//span[@data-testid="alert-notification"]'
         }
+
+        # <create the rest of your GUI here>
 
     # Common commands
     def klik(self, xpath):
@@ -168,25 +204,22 @@ class Blast:
         df = df.dropna()
         self.contact = df.iloc[:, :1].values.ravel()
 
+    def impor_kontak(self):
+        filepath = askopenfilename(
+            filetypes=[("Excel Files", "*.xlsx"), ("All Files", "*.*")]
+        )
+        if not filepath:
+            return
+        self.import_contact(filepath)
+        self.lbl_target["text"] = self.contact
+
     def export(self, filename='report.xlsx'):
         self.report.to_excel(f'./report/{filename}', index=False)
 
     def close(self):
         self.driver.quit()
 
-
-class BlastData():
-    def __init__(self):
-        self.contact = None
-        self.report = None
-
-    def import_contact(self, filepath):
-        df = pd.read_excel(filepath)
-        df = df.dropna()
-        self.contact = df.iloc[:, :1].values.ravel()
-
-
-if __name__ == '__main__':
-    blast = Blast()
-    time.sleep(10)
-    blast.access()
+if __name__ == "__main__":
+    root = tk.Tk()
+    b = Blast(root).pack(side="top", fill="both", expand=True)
+    root.mainloop()
