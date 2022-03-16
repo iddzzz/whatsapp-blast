@@ -8,5 +8,5 @@ Selenium-based WhatsApp automation system to send target-dependent messages or f
 
 **Python** version 3.9 \
 **Packages:** Selenium, Pandas \
-**Chromedriver** Chrome version 97 from https://chromedriver.chromium.org/downloads
+**Chromedriver** Chrome version 98 from https://chromedriver.chromium.org/downloads
 
