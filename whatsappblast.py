@@ -27,16 +27,32 @@ class MainApplication(tk.Frame):
         self.btn_import.grid(row=1, column=0, sticky="ew", padx=5)
 
         # Elements on fr_additional
-        self.btn_forward = tk.Button(self.fr_additional, text="Forward")
-        self.btn_forward.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        self.lbl_from = tk.Label(self.fr_additional, text="From (Group/Person)")
+        self.entry_from = tk.Entry(self.fr_additional)
+        self.lbl_num_msg = tk.Label(self.fr_additional, text="Number of messages")
+        self.entry_num = tk.Entry(self.fr_additional)
+        self.btn_forward = tk.Button(self.fr_additional, text="Forward", command=self.forward)
 
+        self.lbl_from.grid(row=0, column=0, sticky="ew", padx=5)
+        self.entry_from.grid(row=0, column=1, sticky="ew", padx=5)
+        self.lbl_num_msg.grid(row=1, column=0, sticky="ew", padx=5)
+        self.entry_num.grid(row=1, column=1, sticky="ew", padx=5)
+        self.btn_forward.grid(row=2, column=1, sticky="ew", padx=5, pady=5)
+
+        # Master attachment
         self.fr_buttons.grid(row=0, column=0, sticky="ns")
         self.txt_contact.grid(row=0, column=1, sticky="nsew")
         self.fr_additional.grid(row=0, column=2, sticky="nsew")
 
     def connect(self):
-        self.b = Blast()
-        self.b.access()
+        if self.b is None:
+            self.b = Blast()
+            self.b.access()
+            self.btn_connect["text"] = "Disconnect"
+        else:
+            self.b.close()
+            self.btn_connect["text"] = "Connect"
+            self.b = None
 
     def impor_kontak(self):
         filepath = askopenfilename(
@@ -51,6 +67,22 @@ class MainApplication(tk.Frame):
             pass
         for name in self.data.contact:
             self.txt_contact.insert(tk.END, f'{name}\n')
+
+    def forward(self):
+        try:
+            from_who = self.entry_from.get()
+            num = int(self.entry_num.get())
+            target = self.data.contact
+        except:
+            print('Forward Failed')
+            return
+
+        if all([from_who, num, all(target)]):
+            self.b.forward(from_who, num, target)
+        else:
+            print('Harus ada dari, jumlah, target')
+
+        return
 
 
 if __name__ == "__main__":
