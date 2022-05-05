@@ -3,3 +3,6 @@ __pycache__
 *.ini
 testing.py
 *.log
+*.xlsx
+*.xls
+*.png

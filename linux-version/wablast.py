@@ -12,11 +12,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
 import pandas as pd
+import os
 
 from config import config
 
 
-class Blast:
+class BlastBasis:
     s = Service("./geckodriver")
 
     def __init__(self, profile='profile.ini'):
@@ -42,8 +43,13 @@ class Blast:
             'search_fwd': '//div[@role="textbox"]',
             'send': '//div[@role="button"]',
             'checkbox_fwd': '//div[@data-testid="visual-checkbox"]',
-            'search_name': '//div[@title="Search input textbox"]',
-            'active_sign': '//span[@data-testid="alert-notification"]'
+            'search_name': '//div[@id="side"]//div[@role="textbox"]',
+            'active_sign': '//span[@data-testid="alert-notification"]',
+            'footer': '//footer',
+            'textbox': '//footer//div[@role="textbox"]',  # textbox message
+            'attach': '//div[@title="Attach"]',
+            'input_image': '//button[@aria-label="Photos & Videos"]//input',
+            'dialog': '//div[@role="dialog"]'
         }
         self.count = 0
 
@@ -58,6 +64,21 @@ class Blast:
 
     def access(self, url='https://web.whatsapp.com/'):
         self.__driver.get(url)
+
+    def hover(self, elem):
+        ActionChains(self.__driver).move_to_element(elem).perform()
+
+    def element(self, xpath):
+        return self.__driver.find_element(By.XPATH, xpath)
+
+    def elements(self, xpath):
+        return self.__driver.find_elements(By.XPATH, xpath)
+
+    def enter(self):
+        ActionChains(self.__driver).key_down(Keys.ENTER).key_up(Keys.ENTER).perform()
+
+    def shiftenter(self):
+        ActionChains(self.__driver).key_down(Keys.SHIFT).key_down(Keys.ENTER).key_up(Keys.ENTER).key_up(Keys.SHIFT).perform()
 
     # Specific commands
     def isactive(self):
@@ -75,14 +96,30 @@ class Blast:
     def choose_name_or_group(self, name='CHECK'):
         self.klik(f'//span[@title="{name}"]')
 
+    def hover_last_message(self):
+        main_panel = self.element(self.xpath['main'])
+        self.hover(main_panel)
+        elems = main_panel.find_elements(By.XPATH, self.xpath['messages'])
+        child = elems[-1].find_element(By.TAG_NAME, 'div')
+        child = child.find_element(By.TAG_NAME, 'div')
+        self.hover(child)
+
     def click_msg_option(self):
         main_panel = self.__driver.find_element(By.XPATH, self.xpath['main'])
         elems = main_panel.find_elements(By.XPATH, self.xpath['messages'])
-        child = elems[-1].find_element(By.TAG_NAME, "div")
-        ActionChains(self.__driver).move_to_element(child).perform()  # hover over
-        time.sleep(1)
+        self.doesexist(self.xpath['msg_option'], 3)
         elems[-1].find_element(By.XPATH, self.xpath['msg_option']).click()
-        # self.klik(self.xpath['msg_option'])
+
+    def type_message(self, lines: list):
+        for line in lines:
+            self.element(self.xpath['textbox']).send_keys(line)
+            time.sleep(0.2)
+            self.shiftenter()
+
+    def attach_image(self, filename):
+        self.element(self.xpath['attach']).click()
+        time.sleep(self.pause)
+        self.element(self.xpath['input_image']).send_keys(os.getcwd()+'/'+filename)
 
     # Forward message(s)
     def click_fwd_msg(self):
@@ -122,43 +159,6 @@ class Blast:
     def send_fwd(self):
         self.klik(self.xpath['send'])
 
-    def forward(self, source, n, targets: list):
-        self.report = pd.DataFrame({'name': targets})
-        self.temp = []
-        all_target = utils.list_partition(targets)
-        for subtarget in all_target:
-            self.looptilactive()
-            self.choose_name_or_group(source)
-            time.sleep(self.pause)
-            self.click_msg_option()
-            time.sleep(self.pause)
-            self.klik(self.xpath['forward'])
-            time.sleep(self.pause)
-            self.click_msg_to_fwd(n)
-            time.sleep(self.pause)
-            self.click_fwd_btn()
-            time.sleep(self.pause)
-            self.count = 0
-            for target in subtarget:
-                self.fill_click_target_fwd(target)
-            self.klik(self.xpath['send'])
-        self.report['sent'] = self.temp
-
-    def check_contacts(self, names: list):
-        self.report = pd.DataFrame({'name': names})
-        self.temp = []
-        for name in names:
-            self.looptilactive()
-            self.search_name(name)
-            try:
-                self.cek_n_klik(f'//span[@title="{name}"]', t=3)
-                self.temp.append(1)
-            except TimeoutException:
-                self.temp.append(0)
-            finally:
-                time.sleep(self.pause)
-        self.report['available'] = self.temp
-
     # Other commands
     def clickable(self, xpath, t=45):
         wait = WebDriverWait(self.__driver, t)
@@ -175,11 +175,10 @@ class Blast:
             print('Can\'t continue. Need connection!')
             time.sleep(5)
 
-    def import_contact(self, filename='contact.xlsx'):
-        # df = pd.read_excel(f'./contact/{filename}')
+    def import_contact(self, filename='./contact/contact.xlsx'):
         df = pd.read_excel(filename)
         df = df.dropna()
-        self.contact = df.iloc[:, :1].values.ravel()
+        self.contact = df.iloc[:, :1].values.ravel().tolist()
 
     def export(self, filename='report.xlsx'):
         self.report.to_excel(f'./report/{filename}', index=False)
@@ -188,22 +187,95 @@ class Blast:
         self.__driver.quit()
 
 
-class BlastData():
-    def __init__(self):
-        self.contact = None
-        self.report = None
+class Blast(BlastBasis):
+    def check_contacts(self, names=None):
+        if names is None:
+            names = self.contact
+        assert type(names) == list, "names should be a list"
+        if not len(names):
+            print('names is empty, cant check any contact')
+            return
+        self.report = pd.DataFrame({'name': names})
+        self.temp = []
+        for name in names:
+            self.looptilactive()
+            self.search_name(name)
+            try:
+                self.cek_n_klik(f'//span[@title="{name}"]', t=3)
+                self.temp.append(1)
+            except TimeoutException:
+                self.temp.append(0)
+            finally:
+                time.sleep(self.pause)
+        self.report['available'] = self.temp
 
-    def import_contact(self, filepath):
-        df = pd.read_excel(filepath)
-        df = df.dropna()
-        self.contact = df.iloc[:, :1].values.ravel()
+    def forward(self, source, n: int, targets=None):
+        if targets is None:
+            targets = self.contact
+        assert type(targets) == list, "targets should be a list"
+        if not len(targets):
+            print('targets is empty, cant forward to any contact')
+            return
+        self.report = pd.DataFrame({'name': targets})
+        self.temp = []
+        all_target = utils.list_partition(targets)
+        for subtarget in all_target:
+            self.looptilactive()
+            self.choose_name_or_group(source)
+            time.sleep(self.pause)
+            self.hover_last_message()
+            time.sleep(self.pause)
+            self.click_msg_option()
+            time.sleep(self.pause)
+            self.klik(self.xpath['forward'])
+            time.sleep(self.pause)
+            self.click_msg_to_fwd(n)
+            time.sleep(self.pause)
+            self.click_fwd_btn()
+            time.sleep(self.pause)
+            self.count = 0
+            for target in subtarget:
+                self.fill_click_target_fwd(target)
+            self.klik(self.xpath['send'])
+        self.report['sent'] = self.temp
+
+    def send_message(self, target, lines):
+        self.search_name(target)
+        time.sleep(self.pause)
+        self.choose_name_or_group(target)
+        time.sleep(self.pause)
+        self.type_message(lines)
+        self.enter()
+
+    def send_messages(self, target, msgs):
+        """
+        Args:
+            target
+            msgs: 2D list
+        """
+        self.search_name(target)
+        time.sleep(self.pause)
+        self.choose_name_or_group(target)
+        time.sleep(self.pause)
+        for msg in msgs:
+            if type(msg) == list:
+                self.send_message(target, msg)
+
+    def message_to_number(self, phone):
+        self.access(f'https://web.whatsapp.com/send?phone={phone}&text&app_absent=0')
+        invalid_msg = 'Phone number shared via url is invalid.'
+        self.doesexist(self.xpath['dialog'], t=45)
+        time.sleep(2)
+        try:
+            if invalid_msg in self.element(self.xpath['dialog']).text:
+                print('Phone not found')
+                self.element('//div[@role="button"]').click()
+                return
+            else:
+                return
+        except NoSuchElementException:
+            print('Go go go')
 
 
 if __name__ == '__main__':
-    pass
-    # x = '//div[@tabindex="-1"]'
-    # elems = t.b.find_elements(t.By.XPATH, x)
-    # child = elems[-3].find_element(t.By.TAG_NAME, "div")
-    # t.ActionChains(t.b).move_to_element(child).perform()
-    # m = '//span[@data-testid="down-context"]/parent::*/parent::*'
-
+    print('test' in 'testing')

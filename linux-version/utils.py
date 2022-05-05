@@ -1,5 +1,19 @@
 import math
 
+def txt_to_list(txt):
+    """
+    Read txt file and convert into list
+    Args:
+        txt (string): .txt file
+    Returns:
+        list: list of text (per line)
+    """
+    with open(txt, "r") as the_file:
+        lines = []
+        text = the_file.readlines()
+        for line in text:
+            lines.append(line.strip())
+    return lines
 
 def filter_duplicate(the_list):
     new_list = []
@@ -74,4 +88,4 @@ def ganti_sapaan(nama, the_string, placeholder='<<sapaan>>'):
 
 
 if __name__ == '__main__':
-    pass
+    print(txt_to_list('message.txt'))
