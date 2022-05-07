@@ -1,4 +1,5 @@
 import math
+import os
 
 def txt_to_list(txt):
     """
@@ -87,5 +88,31 @@ def ganti_sapaan(nama, the_string, placeholder='<<sapaan>>'):
     return the_string
 
 
+def picture(filename: str):
+    """
+    Create dict of picture
+    :param filename:
+    :return:
+    """
+    return {'type': 'pic', 'content': os.getcwd() + '/' + filename}
+
+
+def txt(filename: str):
+    """
+    Create dict of txt
+    :param filename:
+    :return:
+    """
+    return {'type': 'txt', 'content': txt_to_list(filename)}
+
+
+def lines(the_list):
+    return {'type': 'lines', 'content': the_list}
+
+
+
 if __name__ == '__main__':
-    print(txt_to_list('message.txt'))
+    # print(picture('picture.png'))
+    x = {'k': 12}
+    print(x.keys)
+

@@ -20,18 +20,13 @@ from config import config
 class BlastBasis:
     s = Service("./geckodriver")
 
-    def __init__(self, profile='profile.ini'):
+    def __init__(self, profile):
         self.__options = Options()
         self.__options.add_argument("-profile")
         self.__options.add_argument(config(profile)['profile_path'])
         self.__driver = webdriver.Firefox(service=Blast.s, options=self.__options)
         self.wait = WebDriverWait(self.__driver, 45)
-        self.active = False
-        self.fwd_number = 1
         self.pause = 0.5
-        self.contact = ['Father']
-        self.temp = []
-        self.report = pd.DataFrame()
         self.xpath = {
             'pane_side': '//div[@id="pane-side"]',
             'main': '//div[@id="main"]',
@@ -51,9 +46,8 @@ class BlastBasis:
             'input_image': '//button[@aria-label="Photos & Videos"]//input',
             'dialog': '//div[@role="dialog"]'
         }
-        self.count = 0
 
-    # Common commands
+    # basic commands
     def klik(self, xpath):
         self.clickable(xpath)
         self.__driver.find_element(By.XPATH, xpath).click()
@@ -80,6 +74,9 @@ class BlastBasis:
     def shiftenter(self):
         ActionChains(self.__driver).key_down(Keys.SHIFT).key_down(Keys.ENTER).key_up(Keys.ENTER).key_up(Keys.SHIFT).perform()
 
+    def up(self):
+        ActionChains(self.__driver).key_down(Keys.ARROW_UP).key_up(Keys.ARROW_UP).perform()
+
     # Specific commands
     def isactive(self):
         try:
@@ -98,6 +95,8 @@ class BlastBasis:
 
     def hover_last_message(self):
         main_panel = self.element(self.xpath['main'])
+        main_panel.click()
+        self.up()
         self.hover(main_panel)
         elems = main_panel.find_elements(By.XPATH, self.xpath['messages'])
         child = elems[-1].find_element(By.TAG_NAME, 'div')
@@ -116,48 +115,10 @@ class BlastBasis:
             time.sleep(0.2)
             self.shiftenter()
 
-    def attach_image(self, filename):
+    def attach_image(self, filepath):
         self.element(self.xpath['attach']).click()
         time.sleep(self.pause)
-        self.element(self.xpath['input_image']).send_keys(os.getcwd()+'/'+filename)
-
-    # Forward message(s)
-    def click_fwd_msg(self):
-        self.klik(self.xpath['forward'])
-
-    def click_msg_to_fwd(self, n=1):
-        checkboxes = self.__driver.find_elements(By.XPATH, self.xpath['checkbox_fwd'])
-        self.fwd_number = n
-        if n > 1:
-            for i in range(1, n):
-                checkboxes[-1 - i].click()
-        else:
-            pass
-
-    def click_fwd_btn(self):
-        if self.fwd_number == 1:
-            self.klik(self.xpath['fwd_btn'])
-        else:
-            self.klik(self.xpath['fwds_btn'])
-
-    def fill_click_target_fwd(self, name='Father'):
-        search = self.__driver.find_element(By.XPATH, self.xpath['search_fwd'])
-        search.send_keys(name)
-        time.sleep(self.pause)
-        try:
-            self.cek_n_klik(f'//span[@title="{name}"]', t=3)
-            self.temp.append(1)
-            self.count += 1
-        except ElementNotInteractableException:
-            print(f"Can't click {name}!")
-        except TimeoutException:
-            print(f"Can't find {name}!")
-            self.temp.append(0)
-        finally:
-            search.clear()
-
-    def send_fwd(self):
-        self.klik(self.xpath['send'])
+        self.element(self.xpath['input_image']).send_keys(filepath)
 
     # Other commands
     def clickable(self, xpath, t=45):
@@ -175,6 +136,19 @@ class BlastBasis:
             print('Can\'t continue. Need connection!')
             time.sleep(5)
 
+    def close(self):
+        self.__driver.quit()
+
+
+class Blast(BlastBasis):
+    def __init__(self, profile='profile.ini'):
+        super().__init__(profile)
+        self.contact = ['Father']
+        self.report = pd.DataFrame()
+        self.count = 0
+        self.temp = []
+        self.fwd_number = 1
+
     def import_contact(self, filename='./contact/contact.xlsx'):
         df = pd.read_excel(filename)
         df = df.dropna()
@@ -183,11 +157,6 @@ class BlastBasis:
     def export(self, filename='report.xlsx'):
         self.report.to_excel(f'./report/{filename}', index=False)
 
-    def close(self):
-        self.__driver.quit()
-
-
-class Blast(BlastBasis):
     def check_contacts(self, names=None):
         if names is None:
             names = self.contact
@@ -239,6 +208,44 @@ class Blast(BlastBasis):
             self.klik(self.xpath['send'])
         self.report['sent'] = self.temp
 
+    def fill_click_target_fwd(self, name):
+        search = self.element(self.xpath['search_fwd'])
+        search.send_keys(name)
+        time.sleep(self.pause)
+        try:
+            self.cek_n_klik(f'//span[@title="{name}"]', t=3)
+            self.temp.append(1)
+            self.count += 1
+        except ElementNotInteractableException:
+            print(f"Can't click {name}!")
+        except TimeoutException:
+            print(f"Can't find {name}!")
+            self.temp.append(0)
+        finally:
+            search.clear()
+
+    # Forward message(s)
+    def click_fwd_msg(self):
+        self.klik(self.xpath['forward'])
+
+    def click_msg_to_fwd(self, n=1):
+        checkboxes = self.elements(self.xpath['checkbox_fwd'])
+        self.fwd_number = n
+        if n > 1:
+            for i in range(1, n):
+                checkboxes[-1 - i].click()
+        else:
+            pass
+
+    def click_fwd_btn(self):
+        if self.fwd_number == 1:
+            self.klik(self.xpath['fwd_btn'])
+        else:
+            self.klik(self.xpath['fwds_btn'])
+
+    def send_fwd(self):
+        self.klik(self.xpath['send'])
+
     def send_message(self, target, lines):
         self.search_name(target)
         time.sleep(self.pause)
@@ -251,17 +258,23 @@ class Blast(BlastBasis):
         """
         Args:
             target
-            msgs: 2D list
+            msgs: list of dictionary
         """
         self.search_name(target)
         time.sleep(self.pause)
         self.choose_name_or_group(target)
         time.sleep(self.pause)
         for msg in msgs:
-            if type(msg) == list:
-                self.send_message(target, msg)
+            if msg['type'] == 'lines' or msg['type'] == 'txt':
+                self.type_message(msg['content'])
+                self.enter()
+            elif msg['type'] == 'pic':
+                self.attach_image(msg['content'])
+                time.sleep(2)
+                self.enter()
 
     def message_to_number(self, phone):
+        # FIXME: when the url valid or invalid
         self.access(f'https://web.whatsapp.com/send?phone={phone}&text&app_absent=0')
         invalid_msg = 'Phone number shared via url is invalid.'
         self.doesexist(self.xpath['dialog'], t=45)
@@ -278,4 +291,13 @@ class Blast(BlastBasis):
 
 
 if __name__ == '__main__':
-    print('test' in 'testing')
+    b = Blast('root-profile.ini')
+    try:
+        b.access()
+        b.looptilactive()
+        b.send_messages('CHECK', [utils.lines(['Check', '456']), utils.picture('picture.png'), utils.txt('message.txt')])
+        time.sleep(20)
+    except Exception:
+        print('Error')
+    finally:
+        b.close()
