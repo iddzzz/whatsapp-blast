@@ -13,6 +13,7 @@ from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
 import pandas as pd
 import os
+import threading
 
 from config import config
 
@@ -72,7 +73,8 @@ class BlastBasis:
         ActionChains(self.__driver).key_down(Keys.ENTER).key_up(Keys.ENTER).perform()
 
     def shiftenter(self):
-        ActionChains(self.__driver).key_down(Keys.SHIFT).key_down(Keys.ENTER).key_up(Keys.ENTER).key_up(Keys.SHIFT).perform()
+        ActionChains(self.__driver).key_down(Keys.SHIFT).key_down(Keys.ENTER).key_up(Keys.ENTER).key_up(
+            Keys.SHIFT).perform()
 
     def up(self):
         ActionChains(self.__driver).key_down(Keys.ARROW_UP).key_up(Keys.ARROW_UP).perform()
@@ -90,8 +92,28 @@ class BlastBasis:
         search.clear()
         search.send_keys(name)
 
+    def clear_search_field(self):
+        search = self.__driver.find_element(By.XPATH, self.xpath['search_name'])
+        search.clear()
+
     def choose_name_or_group(self, name='CHECK'):
         self.klik(f'//span[@title="{name}"]')
+
+    def is_name_exist(self, name):
+        self.search_name(name)
+        time.sleep(self.pause)
+        result = False
+        try:
+            self.cek_n_klik(f'//span[@title="{name}"]', t=3)
+            result = True
+        except ElementNotInteractableException:
+            print(f"Can't click {name}!")
+            result = False
+        except TimeoutException:
+            print(f"Can't find {name}!")
+            result = False
+        finally:
+            return result
 
     def hover_last_message(self):
         main_panel = self.element(self.xpath['main'])
@@ -149,8 +171,12 @@ class Blast(BlastBasis):
         self.temp = []
         self.fwd_number = 1
 
-    def import_contact(self, filename='./contact/contact.xlsx'):
-        df = pd.read_excel(filename)
+    def import_contact(self, filename='./contact/contact.xlsx', name_col=None):
+        if name_col is None:
+            df = pd.read_excel(filename)
+        else:
+            df = pd.read_excel(filename, usecols=[name_col])
+
         df = df.dropna()
         self.contact = df.iloc[:, :1].values.ravel().tolist()
 
@@ -273,6 +299,42 @@ class Blast(BlastBasis):
                 time.sleep(2)
                 self.enter()
 
+    def send_messages_with_variables(self, excel='./contact/testing-blast-variable.xlsx', txt='message.txt',
+                                     col_filter=None):
+        """
+        Args:
+            target
+            msgs: list of dictionary
+        """
+        df = pd.read_excel(excel)
+        assert len(df.columns) > 1, 'Number of columns should be > 1'
+
+        df = df[df[col_filter] == 1] if col_filter is not None else df
+
+        with open(txt, "r") as the_file:
+            text = the_file.read()
+
+        for i, row in df.iterrows():
+            self.looptilactive()
+            edited_text = text
+            for column in df.columns:
+                if column == 'name':
+                    continue
+                if f'<<{column}>>' in edited_text:
+                    edited_text = edited_text.replace(f'<<{column}>>', row[column])
+            edited_text = edited_text.split('\n')
+
+            target = row['name']
+            if self.is_name_exist(target):
+                self.search_name(target)
+                time.sleep(self.pause)
+                self.choose_name_or_group(target)
+                time.sleep(self.pause)
+                self.type_message(edited_text)
+                self.enter()
+            else:
+                print(f'{target} does not exist in your contact')
+
     def message_to_number(self, phone):
         # FIXME: when the url valid or invalid
         self.access(f'https://web.whatsapp.com/send?phone={phone}&text&app_absent=0')
@@ -290,14 +352,266 @@ class Blast(BlastBasis):
             print('Go go go')
 
 
+import sys
+from PyQt5 import QtCore, QtGui, QtWidgets, uic
+from PyQt5.QtCore import Qt
+
+qt_creator_file = "wablast.ui"
+Ui_MainWindow, QtBaseClass = uic.loadUiType(qt_creator_file)
+tick = QtGui.QColor('green')
+white = QtGui.QColor('white')
+
+
+class ReportModel(QtCore.QAbstractListModel):
+    def __init__(self, *args, contact=None, **kwargs):
+        super(ReportModel, self).__init__(*args, **kwargs)
+        self.contact = contact or []
+
+    def data(self, index, role):
+        if role == Qt.DisplayRole:
+            # See below for the data structure
+            _, text = self.contact[index.row()]
+            # Return the doto text only
+            return text
+
+        if role == Qt.DecorationRole:
+            status, _ = self.contact[index.row()]
+            if status:
+                return tick
+            else:
+                return white
+
+    def rowCount(self, index):
+        return len(self.contact)
+
+
+class DataFrameModel(QtCore.QAbstractTableModel):
+    DtypeRole = QtCore.Qt.UserRole + 1000
+    ValueRole = QtCore.Qt.UserRole + 1001
+
+    def __init__(self, df=pd.DataFrame(), parent=None):
+        super(DataFrameModel, self).__init__(parent)
+        self._dataframe = df
+
+    def setDataFrame(self, dataframe):
+        self.beginResetModel()
+        self._dataframe = dataframe.copy()
+        self.endResetModel()
+
+    def dataFrame(self):
+        return self._dataframe
+
+    dataFrame = QtCore.pyqtProperty(pd.DataFrame, fget=dataFrame, fset=setDataFrame)
+
+    @QtCore.pyqtSlot(int, QtCore.Qt.Orientation, result=str)
+    def headerData(self, section: int, orientation: QtCore.Qt.Orientation, role: int = QtCore.Qt.DisplayRole):
+        if role == QtCore.Qt.DisplayRole:
+            if orientation == QtCore.Qt.Horizontal:
+                return self._dataframe.columns[section]
+            else:
+                return str(self._dataframe.index[section])
+        return QtCore.QVariant()
+
+    def rowCount(self, parent=QtCore.QModelIndex()):
+        if parent.isValid():
+            return 0
+        return len(self._dataframe.index)
+
+    def columnCount(self, parent=QtCore.QModelIndex()):
+        if parent.isValid():
+            return 0
+        return self._dataframe.columns.size
+
+    def data(self, index, role=QtCore.Qt.DisplayRole):
+        if not index.isValid() or not (0 <= index.row() < self.rowCount() \
+            and 0 <= index.column() < self.columnCount()):
+            return QtCore.QVariant()
+        row = self._dataframe.index[index.row()]
+        col = self._dataframe.columns[index.column()]
+        dt = self._dataframe[col].dtype
+
+        val = self._dataframe.iloc[row][col]
+        if role == QtCore.Qt.DisplayRole:
+            return str(val)
+        elif role == DataFrameModel.ValueRole:
+            return val
+        if role == DataFrameModel.DtypeRole:
+            return dt
+        return QtCore.QVariant()
+
+    def roleNames(self):
+        roles = {
+            QtCore.Qt.DisplayRole: b'display',
+            DataFrameModel.DtypeRole: b'dtype',
+            DataFrameModel.ValueRole: b'value'
+        }
+        return roles
+
+
+class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
+    def __init__(self):
+        QtWidgets.QMainWindow.__init__(self)
+        Ui_MainWindow.__init__(self)
+        self.setupUi(self)
+        self.contactmodel = ReportModel()
+        self.contactView.setModel(self.contactmodel)
+        self.dfmodel = DataFrameModel()
+        self.tableView.setModel(self.dfmodel)
+        self.blast = Blast('root-profile.ini')
+
+        # Connect the button
+        self.connectButton.pressed.connect(self.access)
+        self.sendButton.pressed.connect(self.send_messages)
+        self.setTargetButton.pressed.connect(self.set_target)
+        self.forwardButton.pressed.connect(self.forward)
+        self.clearTargetButton.pressed.connect(self.clear_target)
+
+        # Connect the menu
+        self.actionOpen_Excel.triggered.connect(self.open_excel)
+
+    def open_excel(self):
+        fname, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Open Excel', "/home/iddzzz/Files", 'Excel File (*.xlsx)')
+        if fname:
+            df = pd.read_excel(fname)
+            self.dfmodel.setDataFrame(df)
+            self.dfmodel.layoutChanged.emit()
+
+    def access(self):
+        threading.Thread(target=self.blast.access).start()
+        return
+
+    def set_target(self):
+        indexes = self.tableView.selectedIndexes()
+        if indexes:
+            temp = self.dfmodel.dataFrame
+            for index in indexes:
+                self.contactmodel.contact.append([False, temp.at[index.row(), temp.columns[index.column()]]])
+            del temp
+            self.contactmodel.layoutChanged.emit()
+        else:
+            self.statusbar.showMessage("No data selected")
+
+    def clear_target(self):
+        self.contactmodel.contact = []
+        self.contactmodel.layoutChanged.emit()
+
+    def forward_messages(self, blast_obj, source, n: int, targets=None):
+        if targets is None:
+            targets = blast_obj.contact
+        assert type(targets) == list, "targets should be a list"
+        if not len(targets):
+            print('targets is empty, cant forward to any contact')
+            return
+        blast_obj.report = pd.DataFrame({'name': targets})
+        blast_obj.temp = []
+        all_target = utils.list_partition(targets)
+        i = 0
+        m = len(targets)
+        for subtarget in all_target:
+            blast_obj.looptilactive()
+            blast_obj.choose_name_or_group(source)
+            time.sleep(blast_obj.pause)
+            blast_obj.hover_last_message()
+            time.sleep(blast_obj.pause)
+            blast_obj.click_msg_option()
+            time.sleep(blast_obj.pause)
+            blast_obj.klik(blast_obj.xpath['forward'])
+            time.sleep(blast_obj.pause)
+            blast_obj.click_msg_to_fwd(n)
+            time.sleep(blast_obj.pause)
+            blast_obj.click_fwd_btn()
+            time.sleep(blast_obj.pause)
+            blast_obj.count = 0
+            for target in subtarget:
+                i += 1
+                blast_obj.fill_click_target_fwd(target)
+                self.statusbar.showMessage(f'Forwarding messages... ({i}/{m})')
+                self.contactmodel.contact[i - 1][0] = True
+                # self.contactmodel.dataChanged.emit(PyQt5.QtCore.QModelIndex, PyQt5.QtCore.QModelIndex)
+                self.contactmodel.dataChanged.emit(self.contactmodel.index(i - 1, 0), self.contactmodel.index(i - 1, 0))
+            blast_obj.klik(blast_obj.xpath['send'])
+        blast_obj.report['sent'] = blast_obj.temp
+        self.statusbar.showMessage(f'Forwarding completed ({i}/{m})')
+
+    def forward(self):
+        try:
+            assert len(self.contactmodel.contact) > 0, "No target found."
+            targets = []
+            for _, name in self.contactmodel.contact:
+                targets.append(name)
+            from_whom = self.fromForwardEdit.text()
+            total_messages = int(self.numberForwardEdit.text())
+            if from_whom and total_messages > 0:
+                threading.Thread(target=self.forward_messages,
+                                 args=[self.blast, from_whom, total_messages, targets]).start()
+                return
+        except Exception as why:
+            self.statusbar.showMessage(str(why))
+
+    def send_messages(self):
+        try:
+            text = self.textEdit.toPlainText()
+            assert text != '', 'Type a message'
+            assert not self.dfmodel.dataFrame.empty and len(self.contactmodel.contact) != 0,\
+                'No target found'
+            assert self.dfmodel.dataFrame.shape[0] == len(self.contactmodel.contact),\
+                'Length of the target list and the table should match.'
+
+            col_filter = self.columnFilterEdit.text().strip()
+            if col_filter == '':
+                col_filter = None
+            threading.Thread(target=self.blast.send_messages_with_variables,
+                             args=[self.blast, self.dfmodel.dataFrame, text, col_filter]).start()
+            return
+        except Exception as why:
+            self.statusbar.showMessage(str(why))
+
+    def send_messages_with_variables(self, blast_obj, df, txt='This is a message',
+                                     col_filter=None):
+        """
+        Args:
+            target
+            msgs: list of dictionary
+        """
+        assert len(df.columns) > 1, 'Number of columns should be > 1'
+
+        df = df[df[col_filter] == 1] if col_filter is not None else df
+
+        row_in_use = df.index
+        target_in_use = []
+        for i, item in enumerate(self.contactmodel.contact):
+            if i in row_in_use:
+                target_in_use.append(item[1])
+
+
+        text = txt
+
+        for i, row in df.iterrows():
+            blast_obj.looptilactive()
+            edited_text = text
+            for column in df.columns:
+                if column == 'name':
+                    continue
+                if f'<<{column}>>' in edited_text:
+                    edited_text = edited_text.replace(f'<<{column}>>', row[column])
+            edited_text = edited_text.split('\n')
+
+            target = row['name']
+            if blast_obj.is_name_exist(target):
+                blast_obj.search_name(target)
+                time.sleep(blast_obj.pause)
+                blast_obj.choose_name_or_group(target)
+                time.sleep(blast_obj.pause)
+                blast_obj.type_message(edited_text)
+                blast_obj.enter()
+            else:
+                print(f'{target} does not exist in your contact')
+
+
+
 if __name__ == '__main__':
-    b = Blast('root-profile.ini')
-    try:
-        b.access()
-        b.looptilactive()
-        b.send_messages('CHECK', [utils.lines(['Check', '456']), utils.picture('picture.png'), utils.txt('message.txt')])
-        time.sleep(20)
-    except Exception:
-        print('Error')
-    finally:
-        b.close()
+    app = QtWidgets.QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    app.exec_()
+    window.blast.close()
